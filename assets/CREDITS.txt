@@ -1,0 +1,8 @@
+Фоны (assets/home_bg.png, assets/board_bg.png)
+==============================================
+Основа: вариант 1 (оружейная + изометрическая арена).
+Обработка под стиль Segel chibi и UI игры:
+  python3 scripts/stylize-backgrounds.py
+
+Исходники без обработки: assets/source_v1/
+Восстановление сырьё: python3 scripts/restore-backgrounds-v1.py

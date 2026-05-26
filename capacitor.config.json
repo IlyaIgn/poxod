@@ -1,0 +1,12 @@
+{
+  "appId": "ru.krugovoj.pohod",
+  "appName": "Круговой Поход",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0d1117"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

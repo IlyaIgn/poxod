@@ -1,0 +1,8 @@
+Враги (chibi, стиль Segel T — как 2D Knight Chibi):
+- Slime: Adventurer and Slime game Sprites
+  https://opengameart.org/content/adventurer-and-slime-game-sprites
+- Bat: 2D Monster Bat Enemy
+  https://opengameart.org/content/2d-monster-bat-enemy
+- Rat (гоблин): 2D Goblin Chibi
+  https://opengameart.org/content/2d-goblin-chibi
+Лицензия: CC-BY 3.0 / OGA-BY 3.0 (OpenGameArt)

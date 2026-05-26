@@ -1,0 +1,27 @@
+{
+  "name": "krugovoj-pohod",
+  "version": "1.0.0",
+  "description": "Круговой Поход — HTML5 игра для Яндекс Игр",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve -l 8080 .",
+    "dev:yandex": "npx --yes @yandex-games/sdk-dev-proxy -p . --dev-mode=true --port 8080",
+    "dev:yandex:prod": "npx --yes @yandex-games/sdk-dev-proxy -p . --port 8080",
+    "build:zip": "node scripts/build-release.js",
+    "sync:www": "node scripts/sync-www.js",
+    "android:sync": "npm run sync:www && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run android:sync && cd android && JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug && node ../scripts/copy-apk.js debug",
+    "android:release": "npm run android:sync && cd android && JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleRelease && node ../scripts/copy-apk.js release"
+  },
+  "capacitor": {
+    "platforms": [
+      "android"
+    ]
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.2.0",
+    "@capacitor/cli": "^7.2.0",
+    "@capacitor/core": "^7.2.0"
+  }
+}
