@@ -11,8 +11,8 @@ const TILE_VISUAL_SCALE = 1;
 
 /** Фишка героя на клетке: чуть ниже и к центру петли доски */
 const BOARD_PLAYER_SLOT_NUDGE = {
-  towardCenter: 0.1,
-  downFactor: 0.06,
+  towardCenter: 0,
+  downFactor: 0.35,
 };
 
 const BOSS_LEVEL = GameConfig.meta.bossLevel;
@@ -684,14 +684,30 @@ class BoardScene extends Phaser.Scene {
       }).setOrigin(1, 0.5).setDepth(depth + 1);
 
       let timerText = null;
+      let timerTooltip = null;
+      let timerTooltipBg = null;
       if (stat.key === 'energy') {
-        timerText = this.add.text(xValue, rowY + 12, '', {
-          fontSize: scaleFontSize(this, 10),
+        timerTooltipBg = this.add.rectangle(0, 0, 24, 18, 0x243447, 0.96)
+          .setOrigin(0, 0.5)
+          .setStrokeStyle(1, 0x3d566e);
+        timerText = this.add.text(8, 0, '', {
+          fontSize: scaleFontSize(this, 12),
           color: '#2ecc71',
-        }).setOrigin(1, 0).setVisible(false).setDepth(depth + 1);
+          fontStyle: 'bold',
+        })
+          .setOrigin(0, 0.5);
+        timerTooltip = this.add.container(xValue + 10, rowY, [timerTooltipBg, timerText])
+          .setVisible(false)
+          .setDepth(depth + 2);
       }
 
-      this.statRows[stat.key] = { valueText, format: stat.format, timerText };
+      this.statRows[stat.key] = {
+        valueText,
+        format: stat.format,
+        timerText,
+        timerTooltip,
+        timerTooltipBg,
+      };
 
       if (stat.key === 'energy') {
         const hitX = pad + panelW / 2;
@@ -723,7 +739,7 @@ class BoardScene extends Phaser.Scene {
     const depth = 2000;
 
     const measureStyle = {
-      fontSize: scaleFontSize(this, 10),
+      fontSize: scaleFontSize(this, 15),
       wordWrap: { width: textMaxW },
     };
     const rowHeights = items.map((item) => {
@@ -764,7 +780,7 @@ class BoardScene extends Phaser.Scene {
 
     this.legendPanelContainer.add(
       this.add.text(panelLeft + innerPad, panelTop + 8, GameConfig.text.board.legendTitle, {
-        fontSize: scaleFontSize(this, 11),
+        fontSize: scaleFontSize(this, 12),
         color: '#8b9cb3',
         fontStyle: 'bold',
       }).setOrigin(0, 0),
@@ -788,7 +804,7 @@ class BoardScene extends Phaser.Scene {
 
       this.legendPanelContainer.add(
         this.add.text(textX, rowY, `${item.slot} — ${item.desc}`, {
-          fontSize: scaleFontSize(this, 10),
+          fontSize: scaleFontSize(this, 12),
           color: '#d5dbdb',
           wordWrap: { width: textMaxW },
           lineSpacing: 1,
@@ -1593,12 +1609,12 @@ class BoardScene extends Phaser.Scene {
         if (tile.defeated) break;
         this.playKnightHurt();
         const dmg = GameState.takeDamage(tile.damage);
-        this.showCenterMessage(
-          GameConfig.format(GameConfig.text.board.trapDamage, {
-            label: tile.label,
-            damage: dmg,
-          }),
-          'damage',
+        this.showFloatingPlayerTooltip(
+          GameConfig.format(
+            GameConfig.text.board.trapTooltip || '-{damage} HP',
+            { damage: dmg },
+          ),
+          '#ff6b6b',
         );
         this.checkDeath();
         this.markTilePassed(i);
@@ -1629,6 +1645,8 @@ class BoardScene extends Phaser.Scene {
   applyBuff(tile) {
     const buffCfg = GameConfig.economy.buffs;
     let message = '';
+    let tooltip = '';
+    let color = '#2ecc71';
     switch (tile.buff) {
       case 'heal': {
         const n = buffCfg.heal.hp;
@@ -1637,6 +1655,11 @@ class BoardScene extends Phaser.Scene {
           label: tile.label,
           hp: n,
         });
+        tooltip = GameConfig.format(
+          GameConfig.text.board.buffHealTooltip || '+{hp} HP',
+          { hp: n },
+        );
+        color = '#2ecc71';
         break;
       }
       case 'attack': {
@@ -1646,6 +1669,11 @@ class BoardScene extends Phaser.Scene {
           label: tile.label,
           attack: n,
         });
+        tooltip = GameConfig.format(
+          GameConfig.text.board.buffAttackTooltip || '+{attack} ATK',
+          { attack: n },
+        );
+        color = '#e67e22';
         break;
       }
       case 'defense': {
@@ -1655,10 +1683,17 @@ class BoardScene extends Phaser.Scene {
           label: tile.label,
           defense: n,
         });
+        tooltip = GameConfig.format(
+          GameConfig.text.board.buffDefenseTooltip || '+{defense} DEF',
+          { defense: n },
+        );
+        color = '#9b59b6';
         break;
       }
     }
-    if (message) {
+    if (tooltip) {
+      this.showFloatingPlayerTooltip(tooltip, color);
+    } else if (message) {
       this.showCenterMessage(message, 'buff');
     }
   }
@@ -1827,9 +1862,9 @@ class BoardScene extends Phaser.Scene {
     this.syncCombatFighters(mood);
   }
 
-  showGoldTooltip(amount) {
-    const gold = Math.round(Number(amount) || 0);
-    if (gold <= 0) return;
+  showFloatingPlayerTooltip(label, color = '#f1c40f') {
+    const textValue = String(label || '').trim();
+    if (!textValue) return;
 
     const sprite = (this.isInCombat && this.combatKnight?.active)
       ? this.combatKnight
@@ -1839,11 +1874,10 @@ class BoardScene extends Phaser.Scene {
     const offsetY = sprite.displayHeight * 0.92 + 14;
     const x = sprite.x;
     const y = sprite.y - offsetY;
-    const label = GameConfig.format(GameConfig.text.board.goldTooltip, { gold });
 
-    const text = this.add.text(x, y, label, {
+    const text = this.add.text(x, y, textValue, {
       fontSize: scaleFontSize(this, 20),
-      color: '#f1c40f',
+      color,
       fontStyle: 'bold',
       stroke: '#1a1a1a',
       strokeThickness: 4,
@@ -1857,6 +1891,13 @@ class BoardScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => text.destroy(),
     });
+  }
+
+  showGoldTooltip(amount) {
+    const gold = Math.round(Number(amount) || 0);
+    if (gold <= 0) return;
+    const label = GameConfig.format(GameConfig.text.board.goldTooltip, { gold });
+    this.showFloatingPlayerTooltip(label, '#f1c40f');
   }
 
   showFloatingDamage(sprite, amount, target) {

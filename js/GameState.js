@@ -87,15 +87,42 @@ const GameState = {
     if (!statRow?.timerText) return;
     const label = this.getRegenTimerLabel();
     statRow.timerText.setText(label);
+    let tooltipW = 0;
+    if (statRow.timerTooltipBg) {
+      const padX = 8;
+      const padY = 4;
+      tooltipW = statRow.timerText.width + padX * 2;
+      statRow.timerText.setPosition(padX, 0);
+      statRow.timerTooltipBg
+        .setPosition(0, 0)
+        .setSize(tooltipW, statRow.timerText.height + padY * 2);
+    }
+    if (statRow.valueText && statRow.timerTooltip) {
+      const scene = statRow.valueText.scene || statRow.timerText.scene;
+      const viewportW = scene?.scale?.width || 0;
+      let tooltipX = statRow.valueText.x + 10;
+      if (viewportW > 0 && tooltipW > 0 && tooltipX + tooltipW > viewportW - 8) {
+        tooltipX = statRow.valueText.x - tooltipW - 10;
+      }
+      statRow.timerTooltip.setPosition(tooltipX, statRow.valueText.y);
+    }
     const show = !!statRow.timerVisible && !!label;
-    statRow.timerText.setVisible(show);
+    if (statRow.timerTooltip) {
+      statRow.timerTooltip.setVisible(show);
+    } else {
+      statRow.timerText.setVisible(show);
+    }
   },
 
   bindEnergyStatRowToggle(scene, statRow, x, y, width, height, depth = 0) {
     if (!statRow?.timerText || !scene) return;
 
     statRow.timerVisible = false;
-    statRow.timerText.setVisible(false);
+    if (statRow.timerTooltip) {
+      statRow.timerTooltip.setVisible(false);
+    } else {
+      statRow.timerText.setVisible(false);
+    }
 
     const toggle = () => {
       statRow.timerVisible = !statRow.timerVisible;

@@ -316,6 +316,10 @@ const GameConfig = {
       buffAttack: '{label}\n+{attack} ATK',
       buffDefense: '{label}\n+{defense} DEF',
       goldTooltip: '+{gold}',
+      trapTooltip: '-{damage} HP',
+      buffHealTooltip: '+{hp} HP',
+      buffAttackTooltip: '+{attack} ATK',
+      buffDefenseTooltip: '+{defense} DEF',
       victory: 'Победа!\n+{gold} золота',
       bossVictoryChapter: 'Босс повержен!\n+{gold} золота\n📜 {chapter}',
       bossVictoryDone: 'Босс повержен!\n+{gold} золота\nХроника завершена',
@@ -391,7 +395,7 @@ const GameConfig = {
     boardHomeButton: { width: 250, height: 100, fontSize: 30 },
     /** Кнопка «информация» — открывает легенду клеток */
     legendInfoButtonSize: 80,
-    legendPanel: { width: 252 },
+    legendPanel: { width: 300 },
     /** Размер кубика на доске (px; до UI_PRESENTATION_SCALE ≈0.72) */
     diceBaseSize: 200,
     /** Иконка плитки + «слот — описание» (BoardScene, слева внизу) */

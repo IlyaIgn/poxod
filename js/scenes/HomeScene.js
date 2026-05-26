@@ -58,8 +58,8 @@ class HomeScene extends Phaser.Scene {
     }
     this.knightSprite = KnightAnimator.createSprite(this, knightX, y('hero'), {
       scale: KNIGHT_SCALE.home,
-      originX: 0.5,
-      originY: 0.85,
+      originX: 0,
+      originY: 0.5,
     });
     KnightAnimator.play(this.knightSprite, 'idle');
 
@@ -95,14 +95,25 @@ class HomeScene extends Phaser.Scene {
     this.tutorialOverlay.start();
   }
 
-  createChroniclesButton() {
-    const pad = HOME_TOP_PAD;
-    const gap = HOME_TOP_BTN_GAP;
+  getTopButtonLayout(index, total) {
     const w = UPGRADE_CARD_W;
     const h = UPGRADE_CARD_H;
-    const x = pad + w + gap;
-    const cx = x + w / 2;
-    const cy = pad + h / 2;
+    const gap = HOME_TOP_BTN_GAP;
+    const totalW = total * w + Math.max(0, total - 1) * gap;
+    const left = (this.scale.width - totalW) / 2;
+    const x = left + index * (w + gap);
+    return {
+      w,
+      h,
+      pad: HOME_TOP_PAD,
+      cx: x + w / 2,
+      cy: HOME_TOP_PAD + h / 2,
+    };
+  }
+
+  createChroniclesButton() {
+    const total = IAPManager.isEnabled() ? 2 : 1;
+    const { w, h, pad, cx, cy } = this.getTopButtonLayout(0, total);
     const depth = 5000;
     const color = 0x2c3e50;
     const colorHover = 0x34495e;
@@ -149,13 +160,7 @@ class HomeScene extends Phaser.Scene {
   createShopButton() {
     if (!IAPManager.isEnabled()) return;
 
-    const pad = HOME_TOP_PAD;
-    const gap = HOME_TOP_BTN_GAP;
-    const w = UPGRADE_CARD_W;
-    const h = UPGRADE_CARD_H;
-    const x = pad + 2 * (w + gap);
-    const cx = x + w / 2;
-    const cy = pad + h / 2;
+    const { w, h, pad, cx, cy } = this.getTopButtonLayout(1, 2);
     const depth = 5000;
     const color = 0x8e44ad;
     const colorHover = 0x9b59b6;
@@ -168,19 +173,12 @@ class HomeScene extends Phaser.Scene {
     const accent = this.add.rectangle(cx, pad + 3, w, 6, colorHover, 1).setDepth(depth);
 
     const titleText = GameConfig.text.home.shopButtonTitle || 'Магазин';
-    const label = this.add.text(cx, cy - 12, `🛒 ${titleText}`, {
+    const label = this.add.text(cx, cy, `🛒 ${titleText}`, {
       fontSize: scaleFontSize(this, 17),
       color: '#f0e6d3',
       fontStyle: 'bold',
       align: 'center',
       wordWrap: { width: w - 16 },
-    }).setOrigin(0.5).setDepth(depth);
-
-    const payHint = this.add.text(cx, cy + 20, IAPManager.getPaymentProviderShortLabel(), {
-      fontSize: scaleFontSize(this, 11),
-      color: '#d7bde2',
-      align: 'center',
-      wordWrap: { width: w - 12 },
     }).setOrigin(0.5).setDepth(depth);
 
     const onOpen = () => {
@@ -190,29 +188,23 @@ class HomeScene extends Phaser.Scene {
 
     bg.on('pointerdown', onOpen);
     label.on('pointerdown', onOpen);
-    payHint.on('pointerdown', onOpen);
     const hoverOn = () => {
       bg.setFillStyle(color, 0.55);
       accent.setFillStyle(0xbb8fce);
       label.setColor('#f1c40f');
-      payHint.setColor('#f9e79f');
     };
     const hoverOff = () => {
       bg.setFillStyle(color, 0.35);
       accent.setFillStyle(colorHover);
       label.setColor('#f0e6d3');
-      payHint.setColor('#d7bde2');
     };
     bg.on('pointerover', hoverOn);
     bg.on('pointerout', hoverOff);
     label.on('pointerover', hoverOn);
     label.on('pointerout', hoverOff);
-    payHint.on('pointerover', hoverOn);
-    payHint.on('pointerout', hoverOff);
     label.setInteractive({ useHandCursor: true });
-    payHint.setInteractive({ useHandCursor: true });
 
-    this.shopBtn = { bg, accent, label, payHint };
+    this.shopBtn = { bg, accent, label };
   }
 
   showPendingStoryChapter() {
@@ -376,14 +368,30 @@ class HomeScene extends Phaser.Scene {
       }).setOrigin(1, 0.5);
 
       let timerText = null;
+      let timerTooltip = null;
+      let timerTooltipBg = null;
       if (stat.key === 'energy') {
-        timerText = this.add.text(xValue, rowY + 11, '', {
-          fontSize: scaleFontSize(this, 10),
+        timerTooltipBg = this.add.rectangle(0, 0, 24, 18, 0x243447, 0.96)
+          .setOrigin(0, 0.5)
+          .setStrokeStyle(1, 0x3d566e);
+        timerText = this.add.text(8, 0, '', {
+          fontSize: scaleFontSize(this, 12),
           color: '#2ecc71',
-        }).setOrigin(1, 0).setVisible(false);
+          fontStyle: 'bold',
+        })
+          .setOrigin(0, 0.5);
+        timerTooltip = this.add.container(xValue + 10, rowY, [timerTooltipBg, timerText])
+          .setVisible(false)
+          .setDepth(10);
       }
 
-      this.statRows[stat.key] = { valueText, format: stat.format, timerText };
+      this.statRows[stat.key] = {
+        valueText,
+        format: stat.format,
+        timerText,
+        timerTooltip,
+        timerTooltipBg,
+      };
 
       if (stat.key === 'energy') {
         const hitX = padX - panelW / 2 + 8;
@@ -499,13 +507,14 @@ class HomeScene extends Phaser.Scene {
   }
 
   createBattleButton() {
-    const pad = HOME_TOP_PAD;
     const w = UPGRADE_CARD_W;
     const h = UPGRADE_CARD_H;
-    const x = pad;
-    const y = pad;
-    const cx = x + w / 2;
-    const cy = y + h / 2;
+    const panel = this.statsPanelBg;
+    const panelCx = panel?.x ?? (HOME_TOP_PAD + w / 2);
+    const panelTop = panel ? (panel.y - panel.displayHeight / 2) : HOME_TOP_PAD;
+    const gap = 14;
+    const cx = panelCx;
+    const cy = panelTop - gap - h / 2;
     const depth = 5000;
     const def = BATTLE_BUTTON;
 
@@ -514,7 +523,7 @@ class HomeScene extends Phaser.Scene {
       .setDepth(depth)
       .setInteractive({ useHandCursor: true });
 
-    const accent = this.add.rectangle(cx, y + 3, w, 6, def.color, 1).setDepth(depth);
+    const accent = this.add.rectangle(cx, cy - h / 2 + 3, w, 6, def.color, 1).setDepth(depth);
 
     this.add.text(cx, cy, GameConfig.text.home.battleButton, {
       fontSize: scaleFontSize(this, 20),
