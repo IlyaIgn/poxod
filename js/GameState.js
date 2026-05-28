@@ -75,7 +75,8 @@ const GameState = {
     const sec = this.secondsUntilRegenCap();
     if (sec <= 0) return '';
     const max = this.getMaxEnergy();
-    const tpl = GameConfig.text?.home?.energyRegenTimer
+    const tpl = GameConfig.text?.energy?.regenTimer
+      || GameConfig.text?.home?.energyRegenTimer
       || 'до {max}: {time}';
     return GameConfig.format(tpl, {
       max,
@@ -178,6 +179,11 @@ const GameState = {
     return this.syncEnergy() >= (cfg.rollCost ?? 1);
   },
 
+  canSpendEnergyForBattle() {
+    const cfg = this.getEnergyConfig();
+    return this.syncEnergy() >= (cfg.battleCost ?? 0);
+  },
+
   spendEnergyForRoll() {
     const cfg = this.getEnergyConfig();
     const cost = cfg.rollCost ?? 1;
@@ -189,9 +195,30 @@ const GameState = {
     return true;
   },
 
+  spendEnergyForBattle() {
+    const cfg = this.getEnergyConfig();
+    const cost = cfg.battleCost ?? 0;
+    this.syncEnergy();
+    if (this.energy < cost) return false;
+    this.energy -= cost;
+    this.energyUpdatedAt = Date.now();
+    this.persist();
+    return true;
+  },
+
   secondsUntilEnergyForRoll() {
     const cfg = this.getEnergyConfig();
     const cost = cfg.rollCost ?? 1;
+    this.syncEnergy();
+    if (this.energy >= cost) return 0;
+    const needed = cost - this.energy;
+    const regenMs = Math.max(1, cfg.regenMsPerPoint ?? 60_000);
+    return Math.max(1, Math.ceil((needed * regenMs) / 1000));
+  },
+
+  secondsUntilEnergyForBattle() {
+    const cfg = this.getEnergyConfig();
+    const cost = cfg.battleCost ?? 0;
     this.syncEnergy();
     if (this.energy >= cost) return 0;
     const needed = cost - this.energy;

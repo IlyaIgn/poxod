@@ -2,6 +2,30 @@
  * Экономика доски: веса, кубик, масштаб врагов и наград по раунду.
  */
 const BoardEconomy = {
+  getTileIdentity(tile) {
+    const randomCfg = GameConfig.economy.board?.random || {};
+    const keys = Array.isArray(randomCfg.tileIdentityKeys) && randomCfg.tileIdentityKeys.length
+      ? randomCfg.tileIdentityKeys
+      : ['configType', 'type', 'label', 'monster', 'buff', 'damage', 'gold'];
+    return keys.map((k) => String(tile?.[k] ?? '')).join('|');
+  },
+
+  limitConsecutivePool(pool, recentTiles) {
+    const randomCfg = GameConfig.economy.board?.random || {};
+    const maxConsecutive = Math.max(0, Math.floor(Number(randomCfg.maxConsecutiveSameTile) || 0));
+    if (maxConsecutive <= 0 || !Array.isArray(recentTiles) || recentTiles.length < maxConsecutive) {
+      return pool;
+    }
+
+    const tail = recentTiles.slice(-maxConsecutive);
+    const firstId = this.getTileIdentity(tail[0]);
+    const sameRun = tail.every((t) => this.getTileIdentity(t) === firstId);
+    if (!sameRun) return pool;
+
+    const filtered = pool.filter((tile) => this.getTileIdentity(tile) !== firstId);
+    return filtered.length ? filtered : pool;
+  },
+
   pickWeighted(entries, getWeight) {
     if (!entries?.length) return undefined;
     const weightOf = getWeight || ((e) => e.weight ?? 1);
@@ -32,31 +56,49 @@ const BoardEconomy = {
     return Phaser.Math.Clamp(Math.round(Number(value) || 1), 1, 6);
   },
 
-  pickBoardTileFromPool(pool) {
+  pickBoardTileFromPool(pool, recentTiles = []) {
     if (!pool?.length) return null;
+
+    const randomCfg = GameConfig.economy.board?.random || {};
+    const strategy = randomCfg.strategy || 'typeThenTile';
+    const tileWeightKey = randomCfg.tileWeightKey || 'weight';
+    const tileTypeKey = randomCfg.tileTypeKey || 'configType';
+    const fallbackTileTypeKey = randomCfg.fallbackTileTypeKey || 'type';
+    const typeWeightKey = randomCfg.typeWeightKey || 'weight';
+    const fallbackToTileOnly = randomCfg.fallbackToTileOnly !== false;
+    const tileWeightOf = (tile) => tile?.[tileWeightKey] ?? tile?.weight ?? 1;
+
+    const sourcePool = this.limitConsecutivePool(pool, recentTiles);
+
+    if (strategy === 'tileOnly') {
+      return this.pickWeighted(sourcePool, tileWeightOf);
+    }
 
     const slotWeights = GameConfig.economy.board?.slotWeights;
     if (!slotWeights || typeof slotWeights !== 'object') {
-      return this.pickWeighted(pool, (t) => t.weight ?? 1);
+      return this.pickWeighted(sourcePool, tileWeightOf);
     }
 
     const grouped = {};
-    pool.forEach((tile) => {
-      const key = tile.configType || tile.type;
+    sourcePool.forEach((tile) => {
+      const key = tile?.[tileTypeKey] ?? tile?.[fallbackTileTypeKey];
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(tile);
     });
 
     const typeEntries = Object.keys(slotWeights)
       .filter((key) => grouped[key]?.length)
-      .map((key) => ({ key, weight: slotWeights[key] }));
+      .map((key) => ({ key, [typeWeightKey]: slotWeights[key] }));
 
     if (!typeEntries.length) {
-      return this.pickWeighted(pool, (t) => t.weight ?? 1);
+      return this.pickWeighted(sourcePool, tileWeightOf);
     }
 
-    const typeKey = this.pickWeighted(typeEntries, (e) => e.weight ?? 1).key;
-    return this.pickWeighted(grouped[typeKey], (t) => t.weight ?? 1);
+    const typeKey = this.pickWeighted(typeEntries, (e) => e?.[typeWeightKey] ?? e?.weight ?? 1).key;
+    if (!grouped[typeKey]?.length) {
+      return fallbackToTileOnly ? this.pickWeighted(sourcePool, tileWeightOf) : null;
+    }
+    return this.pickWeighted(grouped[typeKey], tileWeightOf);
   },
 
   getRoundMultiplier(kind, boardLevel) {

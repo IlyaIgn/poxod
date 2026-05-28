@@ -30,13 +30,13 @@ const GameConfig = {
       {
         scene: 'HomeScene',
         title: 'Улучшения',
-        body: 'Потратьте золото на карточки внизу — HP, атаку или защиту.',
+        body: 'Потратьте золото на карточки внизу — HP, атаку или защиту. Цены растут после покупки.',
         highlight: 'upgrades',
       },
       {
         scene: 'HomeScene',
         title: 'В бой!',
-        body: 'Когда готовы — нажмите «В бой».',
+        body: 'Когда готовы — нажмите «В бой». На доске ходите кубиком по клеткам.',
         highlight: 'battle',
         advanceOn: 'battle',
       },
@@ -48,7 +48,7 @@ const GameConfig = {
       {
         scene: 'BoardScene',
         title: 'Кубик',
-        body: 'Нажмите кубик внизу справа — чтобы сделать ход.',
+        body: 'Нажмите кубик внизу справа — выпадет число ходов. После броска фишка идёт по клеткам.',
         highlight: 'dice',
         advanceOn: 'dice',
       },
@@ -61,45 +61,40 @@ const GameConfig = {
       {
         scene: 'BoardScene',
         title: 'Цель забега',
-        body: 'Проходите круги, сстановитесь сильнее и дойдите до Финала. Каждые 5 уровней вас ждет босс. Удачи! Откройте всю историю...',
+        body: 'Пройдите клетки, усильтесь и дойдите до Финала. На 5-м уровне финиш — босс. Удачи!',
         done: true,
       },
     ],
   },
 
   economy: {
+    /** Энергия: траты и реген */
+    energy: {
+      max: 20,
+      rollCost: 1,
+      battleCost: 0,
+      regenMsPerPoint: 60_000,
+    },
+
     /** Стартовые параметры новой игры */
     player: {
       hp: 100,
       maxHp: 100,
+      energy: 10,
       attack: 12,
       defense: 4,
       gold: 50,
       boardLevel: 1,
       laps: 0,
-      /** Стартовая энергия (не больше economy.energy.max) */
-      energy: 100,
     },
 
+    /** HP при возврате на базу после смерти (доля от maxHp) */
     /**
-     * Энергия на бросок кубика на доске.
-     * regenMsPerPoint: 60000 — 1 энергия за 1 минуту.
-     */
-    energy: {
-      max: 100,
-      rollCost: 1,
-      regenMsPerPoint: 60_000,
-    },
-
-    /**
-     * Внутриигровые покупки:
-     * - Яндекс Игры: yandexProductId (консоль Яндекса)
-     * - Google Play: googlePlayProductId (консоль Play, consumable INAPP)
+     * Внутриигровые покупки (Яндекс Игры / Google Play / dev-режим).
      * type: upgrade | energy
      */
     iap: {
       enabled: true,
-      /** true — тест без оплаты (только если нет Yandex/Google) */
       devMode: true,
       products: [
         {
@@ -155,8 +150,7 @@ const GameConfig = {
       ],
     },
 
-    /** HP при возврате на базу после смерти (доля от maxHp) */
-    homeReviveHpRatio: 0.4,
+    homeReviveHpRatio: 1,
 
     /** Цены улучшений на базе */
     upgradeCosts: {
@@ -169,7 +163,6 @@ const GameConfig = {
     upgrades: {
       hp: {
         title: 'Здоровье',
-        desc: 'Увеличивает макс. HP и восстанавливает его',
         bonusLabel: '+15 HP',
         bonusMaxHp: 15,
         bonusHeal: 15,
@@ -179,16 +172,14 @@ const GameConfig = {
       },
       attack: {
         title: 'Атака',
-        desc: 'Сильнее бьёте врагов на доске',
         bonusLabel: '+4 ATK',
         bonus: 4,
-        costMultiplier: 1.4,
+        costMultiplier: 1.35,
         color: 0xe67e22,
         colorHover: 0xf39c12,
       },
       defense: {
         title: 'Защита',
-        desc: 'Меньше урона от врагов и ловушек',
         bonusLabel: '+2 DEF',
         bonus: 2,
         costMultiplier: 1.35,
@@ -199,9 +190,10 @@ const GameConfig = {
 
     /** Эффекты клеток «баф» на доске */
     buffs: {
-      heal: { hp: 25 },
-      attack: { attack: 3 },
-      defense: { defense: 2 },
+      heal: { hp: 40 },
+      attack: { attack: 5 },
+      defense: { defense: 3 },
+	  mega_attack: { attack: 8 },
     },
 
     /**
@@ -226,14 +218,31 @@ const GameConfig = {
       nextLevelPrefix: 'Lvl',
 
       /**
+       * Настройки рандома слотов на маршруте.
+       * strategy:
+       * - 'typeThenTile' — сначала тип (enemy/buff/...), затем конкретная плитка внутри типа;
+       * - 'tileOnly' — выбор сразу из общего пула плиток по их весам.
+       */
+      random: {
+        strategy: 'typeThenTile',
+        tileWeightKey: 'weight',
+        tileTypeKey: 'configType',
+        fallbackTileTypeKey: 'type',
+        typeWeightKey: 'weight',
+        fallbackToTileOnly: true,
+        maxConsecutiveSameTile: 2,
+        tileIdentityKeys: ['configType', 'type', 'label', 'monster', 'buff', 'damage', 'gold'],
+      },
+
+      /**
        * Веса типов слотов при заполнении маршрута (ключ = type из tiles).
        * Сначала выбирается тип, затем конкретная клетка из пула этого типа.
        */
       slotWeights: {
-        enemy: 35,
-        buff: 25,
+        enemy: 40,
+        buff: 15,
         damage: 15,
-        gold: 25,
+        gold: 30,
       },
 
       /**
@@ -250,7 +259,10 @@ const GameConfig = {
         { type: 'enemy', weight: 8, label: 'Крыса', monster: 'rat', hp: 70, atk: 16, defense: 3, gold: 35 },
         { type: 'damage', weight: 6, label: 'Яма', damage: 18 },
         { type: 'buff', weight: 8, label: 'Живая вода', buff: 'defense' },
-        { type: 'gold', weight: 8, label: 'Тайник', gold: 15 },
+        { type: 'gold', weight: 8, label: 'Тайник', gold: 10 },
+		{ type: 'gold', weight: 2, label: 'Сокровищница', gold: 100 },
+		{ type: 'buff', weight: 2, label: 'Алтарь Силы', buff: 'mega_attack' },
+		
       ],
 
       boss: {
@@ -264,7 +276,7 @@ const GameConfig = {
     },
 
     /** Множитель статов врагов за каждую завершённую главу: scale ^ storyUnlocked */
-    enemyChapterScale: 2,
+    enemyChapterScale: 1.35,
 
     /**
      * Множители по раунду забега (boardLevel: 1 … bossLevel).
@@ -273,7 +285,7 @@ const GameConfig = {
      */
     roundScaling: {
       enemy: [1, 1.1, 1.22, 1.35, 1.5],
-      reward: [1, 1.08, 1.17, 1.26, 1.36],
+      reward: [1, 1.1, 1.17, 1.26, 1.36],
     },
   },
 
@@ -285,14 +297,18 @@ const GameConfig = {
       board: 'Боевая доска',
     },
 
+    energy: {
+      regenTimer: 'до восстановления: {time}',
+    },
+
     home: {
       paramsTitle: 'Параметры',
       battleButton: 'В бой',
+      battleButtonWithEnergy: 'В бой',
       chroniclesButton: '📜 Хроника',
       saveLoaded: 'Прогресс загружен',
       notEnoughGold: 'Недостаточно золота!',
-      notEnoughEnergy: 'Недостаточно энергии!\n+{cost} через {seconds} сек.',
-      energyRegenTimer: '⏱ до {max}: {time}',
+      notEnoughEnergyBattle: 'Недостаточно энергии для боя\nНужно: {cost}⚡ · Через: {seconds}с',
       upgradeBought: '{title}\n{bonus}',
       goldPrice: '● {cost} зол.',
     },
@@ -316,10 +332,6 @@ const GameConfig = {
       buffAttack: '{label}\n+{attack} ATK',
       buffDefense: '{label}\n+{defense} DEF',
       goldTooltip: '+{gold}',
-      trapTooltip: '-{damage} HP',
-      buffHealTooltip: '+{hp} HP',
-      buffAttackTooltip: '+{attack} ATK',
-      buffDefenseTooltip: '+{defense} DEF',
       victory: 'Победа!\n+{gold} золота',
       bossVictoryChapter: 'Босс повержен!\n+{gold} золота\n📜 {chapter}',
       bossVictoryDone: 'Босс повержен!\n+{gold} золота\nХроника завершена',
@@ -331,26 +343,8 @@ const GameConfig = {
       teleportAppearHero: 'Появление персонажа...',
       legendTitle: 'Легенда',
       legendInfoButton: 'ℹ',
-      notEnoughEnergy: 'Недостаточно энергии!\n+{cost} через {seconds} сек.',
-      shopButton: '🛒 Магазин',
-      shopButtonTitle: 'Магазин',
-      shopButtonSubtitleYandex: 'Яндекс Игры',
-      shopButtonSubtitleGoogle: 'Google Play',
-      shopButtonSubtitleDev: 'тест · без оплаты',
-      shopButtonSubtitleLocal: 'без реальной оплаты',
-      shopEnergyRegenHint: 'Энергия сверх {max} не восстанавливается — только тратится. До лимита — по таймеру из экономики.',
-      shopTitle: 'Магазин',
-      shopPaymentHintYandex: 'Оплата: встроенные покупки Яндекс Игр (Payments API).',
-      shopPaymentHintGoogle: 'Оплата: Google Play Billing (встроенная касса Play).',
-      shopPaymentHintDev: 'Оплата: тестовый режим (devMode) — товар выдаётся сразу, деньги не списываются.',
-      shopPaymentHintLocal: 'Оплата: SDK Яндекса недоступен — покупка применяется локально (сайт/APK).',
-      shopClose: 'Закрыть',
-      shopBuy: 'Купить',
-      shopBuyFor: 'Купить {price}',
-      shopPurchasedUpgrade: '{title}\n{bonus}',
-      shopPurchasedEnergy: '+{amount} энергии',
-      shopPurchaseFailed: 'Покупка не удалась',
-      shopPurchaseCancelled: 'Покупка отменена',
+      notEnoughEnergy: 'Недостаточно энергии\nНужно: {cost}⚡ · Через: {seconds}с',
+      rollEnergyInfo: '1 ролл = {cost}⚡',
     },
 
     story: {
@@ -385,7 +379,7 @@ const GameConfig = {
     /** Панель параметров на боевой доске (BoardScene, слева сверху) */
     boardStatsPanel: {
       width: 350,
-      height: 228,
+      height: 200,
       fontTitle: 20,
       fontIcon: 22,
       fontLabel: 20,
@@ -395,9 +389,33 @@ const GameConfig = {
     boardHomeButton: { width: 250, height: 100, fontSize: 30 },
     /** Кнопка «информация» — открывает легенду клеток */
     legendInfoButtonSize: 80,
-    legendPanel: { width: 300 },
+    /** Блок легенды на доске */
+    legendPanel: {
+      width: 350,
+      minHeight: 0,
+      outerPadding: 16,
+      innerPadding: 10,
+      iconWidth: 28,
+      iconHeight: 14,
+      titleBlockHeight: 18,
+      rowGap: 3,
+      titleTopOffset: 8,
+      contentTopOffset: 8,
+      titleFontSize: 20,
+      rowFontSize: 17,
+      rowLineSpacing: 1,
+      rowMinHeight: 15,
+      rowHeightExtra: 2,
+    },
     /** Размер кубика на доске (px; до UI_PRESENTATION_SCALE ≈0.72) */
     diceBaseSize: 200,
+    /** Инфо-блок возле кубика о цене ролла */
+    rollEnergyInfo: {
+      width: 150,
+      height: 44,
+      fontSize: 14,
+      gapFromDice: 10,
+    },
     /** Иконка плитки + «слот — описание» (BoardScene, слева внизу) */
     boardLegend: [
       { texture: 'tile_start', slot: 'Старт', desc: 'полное HP' },
@@ -436,10 +454,6 @@ GameConfig.applyPlayerDefaults = function applyPlayerDefaults(target) {
   target.upgradeCosts = GameConfig.cloneUpgradeCosts();
   target.tutorialStep = 0;
   target.tutorialDone = false;
-  const energyCfg = GameConfig.economy.energy || {};
-  const maxEnergy = Math.max(1, energyCfg.max ?? 100);
-  target.energy = Math.min(maxEnergy, p.energy ?? maxEnergy);
-  target.energyUpdatedAt = Date.now();
 };
 
 GameConfig.formatNextLevel = function formatNextLevel(boardLevel) {

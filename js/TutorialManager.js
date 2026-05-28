@@ -95,9 +95,19 @@ class TutorialOverlay {
     this.container = this.scene.add.container(0, 0).setDepth(TUTORIAL_DEPTH);
     this.createBlockers(width, height, focusBounds, step);
 
-    const panel = this.scene.add.rectangle(cx, panelY, panelW, panelH, 0x1e2d3a, 0.98)
-      .setStrokeStyle(2, 0x3498db)
+    const panelColor = 0x2c3e50;
+    const panelAccentColor = 0x34495e;
+    const panel = this.scene.add.rectangle(cx, panelY, panelW, panelH, panelColor, 0.98)
+      .setStrokeStyle(2, panelColor)
       .setDepth(TUTORIAL_DEPTH + 2);
+    const panelAccent = this.scene.add.rectangle(
+      cx,
+      panelY - panelH / 2 + 3,
+      panelW,
+      6,
+      panelAccentColor,
+      1,
+    ).setDepth(TUTORIAL_DEPTH + 3);
 
     const stepNum = (GameState.tutorialStep || 0) + 1;
     const total = TutorialManager.getSteps().length;
@@ -121,7 +131,7 @@ class TutorialOverlay {
       lineSpacing: 4,
     }).setOrigin(0.5).setDepth(TUTORIAL_DEPTH + 3);
 
-    this.container.add([panel, title, counter, body]);
+    this.container.add([panel, panelAccent, title, counter, body]);
 
     const btnY = panelY + panelH / 2 - 28;
     const skipLabel = TutorialManager.getText('skipButton', 'Пропустить');
@@ -156,33 +166,96 @@ class TutorialOverlay {
     }
   }
 
-  getHighlightTarget(key) {
+  /**
+   * Мировые AABB-границы объекта.
+   * Для объектов вне контейнеров используем x/y напрямую.
+   * Для объектов внутри контейнеров суммируем позиции по цепочке родителей.
+   */
+  getSpriteWorldBounds(sprite) {
+    const w = sprite.displayWidth || sprite.width || 0;
+    const h = sprite.displayHeight || sprite.height || 0;
+    if (w <= 0 || h <= 0) return null;
+
+    // Мировые координаты origin-точки: идём по цепочке parentContainer
+    let wx = sprite.x ?? 0;
+    let wy = sprite.y ?? 0;
+    let parent = sprite.parentContainer || null;
+    while (parent) {
+      wx += parent.x ?? 0;
+      wy += parent.y ?? 0;
+      parent = parent.parentContainer || null;
+    }
+
+    const ox = sprite.originX ?? 0.5;
+    const oy = sprite.originY ?? 0.5;
+    return {
+      left:   wx - ox * w,
+      top:    wy - oy * h,
+      right:  wx + (1 - ox) * w,
+      bottom: wy + (1 - oy) * h,
+    };
+  }
+
+  collectBoundsSprites(key) {
     const target = this.targets[key];
-    if (!target) return null;
-    const sprite = target.bg || target.mainDie || target;
-    return sprite?.active ? sprite : null;
+    if (!target) return [];
+
+    // Если target сам является игровым объектом Phaser
+    if (target && target.active === true && typeof target.setDepth === 'function') {
+      return [target];
+    }
+
+    const result = [];
+    const push = (obj) => {
+      if (obj && obj.active === true && typeof obj.setDepth === 'function'
+          && !result.includes(obj)) {
+        result.push(obj);
+      }
+    };
+
+    // Сначала известные поля
+    ['bg', 'accent', 'label', 'text', 'mainDie', 'icon', 'valueText'].forEach((k) => push(target[k]));
+    // Затем всё остальное
+    if (typeof target === 'object') {
+      Object.values(target).forEach((v) => {
+        if (v && typeof v === 'object') push(v);
+      });
+    }
+
+    return result;
   }
 
   getHighlightBounds(key) {
-    const sprite = this.getHighlightTarget(key);
-    if (!sprite) return null;
+    const sprites = this.collectBoundsSprites(key);
+    if (!sprites.length) return null;
 
-    const rawBounds = typeof sprite.getBounds === 'function' ? sprite.getBounds() : null;
-    const width = rawBounds?.width || sprite.displayWidth || sprite.width || 0;
-    const height = rawBounds?.height || sprite.displayHeight || sprite.height || 0;
-    const centerX = rawBounds ? rawBounds.x + rawBounds.width / 2 : (sprite.x ?? 0);
-    const centerY = rawBounds ? rawBounds.y + rawBounds.height / 2 : (sprite.y ?? 0);
-    if (width <= 0 || height <= 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasValid = false;
 
-    const pad = Math.max(16, Math.round(Math.min(width, height) * 0.18));
-    const maxW = this.scene.scale.width;
-    const maxH = this.scene.scale.height;
-    const left = Phaser.Math.Clamp(centerX - width / 2 - pad, 0, maxW);
-    const top = Phaser.Math.Clamp(centerY - height / 2 - pad, 0, maxH);
-    const right = Phaser.Math.Clamp(centerX + width / 2 + pad, 0, maxW);
-    const bottom = Phaser.Math.Clamp(centerY + height / 2 + pad, 0, maxH);
+    sprites.forEach((sprite) => {
+      const b = this.getSpriteWorldBounds(sprite);
+      if (!b) return;
+      minX = Math.min(minX, b.left);
+      minY = Math.min(minY, b.top);
+      maxX = Math.max(maxX, b.right);
+      maxY = Math.max(maxY, b.bottom);
+      hasValid = true;
+    });
 
-    return new Phaser.Geom.Rectangle(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    if (!hasValid || !isFinite(minX)) return null;
+
+    const w = maxX - minX;
+    const h = maxY - minY;
+    const pad = Math.max(20, Math.round(Math.min(w, h) * 0.2));
+    const sw = this.scene.scale.width;
+    const sh = this.scene.scale.height;
+
+    const left   = Phaser.Math.Clamp(minX - pad, 0, sw);
+    const top    = Phaser.Math.Clamp(minY - pad, 0, sh);
+    const right  = Phaser.Math.Clamp(maxX + pad, 0, sw);
+    const bottom = Phaser.Math.Clamp(maxY + pad, 0, sh);
+
+    return new Phaser.Geom.Rectangle(left, top, Math.max(1, right - left), Math.max(1, bottom - top));
   }
 
   addBlockerRect(x, y, width, height, onClick = null) {
@@ -218,19 +291,19 @@ class TutorialOverlay {
 
     const cx = bounds.x + bounds.width / 2;
     const cy = bounds.y + bounds.height / 2;
+
     this.focusGlow = this.scene.add.rectangle(cx, cy, bounds.width + 16, bounds.height + 16, 0xffffff, 0)
-      .setStrokeStyle(8, 0xf1c40f, 0.18)
+      .setStrokeStyle(8, 0xf1c40f, 0.15)
       .setDepth(TUTORIAL_DEPTH + 1);
     this.focusFrame = this.scene.add.rectangle(cx, cy, bounds.width, bounds.height, 0xffffff, 0)
-      .setStrokeStyle(3, 0xf1c40f, 0.95)
+      .setStrokeStyle(3, 0xf1c40f, 1)
       .setDepth(TUTORIAL_DEPTH + 1);
 
     this.scene.tweens.add({
       targets: [this.focusGlow, this.focusFrame],
       scaleX: 1.04,
       scaleY: 1.04,
-      alpha: { from: 0.9, to: 1 },
-      duration: 650,
+      duration: 700,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',

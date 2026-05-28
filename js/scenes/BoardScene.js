@@ -322,7 +322,7 @@ const BOARD_STAT_FORMATS = {
 const BOARD_STATS = GameConfig.ui.boardStats.map((row) => ({
   ...row,
   format: BOARD_STAT_FORMATS[row.key],
-}));
+})).filter((row) => row.key !== 'energy');
 
 const BOARD_CFG = GameConfig.economy.board;
 
@@ -410,6 +410,7 @@ class BoardScene extends Phaser.Scene {
     this.createBoard();
     this.createPlayerToken();
     this.createStatsPanel();
+    this.createEnergyPanel(width);
     this.createBoardLegend(width, height);
     this.createBottomButtons(width, height);
     this.createDiceRandomizer();
@@ -724,32 +725,93 @@ class BoardScene extends Phaser.Scene {
     });
   }
 
+  createEnergyPanel(width) {
+    const pad = 16;
+    const homeCfg = GameConfig.ui.boardHomeButton || { width: 172, height: 62, fontSize: 22 };
+    const homeH = homeCfg.height;
+    const panelW = 240;
+    const compactH = 56;
+    const x = width / 2;
+    const y = pad + homeH / 2;
+    const depth = 2000;
+
+    this.energyPanelCompactH = compactH;
+    this.energyPanelExpandedH = 82;
+    this.energyPanelCenterY = y;
+
+    this.energyPanelBg = this.add.rectangle(x, y, panelW, compactH, 0x243447, 0.92)
+      .setStrokeStyle(2, 0x3d566e)
+      .setDepth(depth);
+
+    this.energyLabelText = this.add.text(x - panelW / 2 + 14, y - 11, '⚡ Энергия', {
+      fontSize: scaleFontSize(this, 18),
+      color: '#95a5a6',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5).setDepth(depth + 1).setVisible(false);
+
+    this.energyValueText = this.add.text(x + panelW / 2 - 14, y - 11, '', {
+      fontSize: scaleFontSize(this, 20),
+      color: '#2ecc71',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0.5).setDepth(depth + 1).setVisible(false);
+
+    this.energyTimerText = this.add.text(x, y + 14, '', {
+      fontSize: scaleFontSize(this, 13),
+      color: '#7bed9f',
+      fontStyle: 'bold',
+      align: 'center',
+    }).setOrigin(0.5).setDepth(depth + 1).setVisible(false);
+
+    this.updateEnergyPanel();
+  }
+
+  updateEnergyPanel() {
+    if (!this.energyPanelBg || !this.energyValueText) return;
+    const timerLabel = GameState.getRegenTimerLabel();
+    const showTimer = !!timerLabel;
+    const h = showTimer ? this.energyPanelExpandedH : this.energyPanelCompactH;
+    const y = this.energyPanelCenterY;
+    const topY = showTimer ? y - 11 : y;
+    this.energyPanelBg.setSize(this.energyPanelBg.width, h);
+    this.energyLabelText.setPosition(this.energyLabelText.x, topY).setVisible(true);
+    this.energyValueText.setPosition(this.energyValueText.x, topY).setVisible(true);
+    this.energyTimerText.setText(timerLabel).setVisible(showTimer);
+  }
+
   createBoardLegend(width, height) {
     const items = GameConfig.ui.boardLegend || [];
     if (!items.length) return;
 
-    const pad = 16;
-    const innerPad = 10;
-    const iconW = 28;
-    const iconH = 14;
-    const titleH = 18;
-    const rowGap = 3;
-    const panelW = GameConfig.ui.legendPanel?.width || 252;
+    const legendCfg = GameConfig.ui.legendPanel || {};
+    const pad = legendCfg.outerPadding ?? 16;
+    const innerPad = legendCfg.innerPadding ?? 10;
+    const iconW = legendCfg.iconWidth ?? 28;
+    const iconH = legendCfg.iconHeight ?? 14;
+    const titleH = legendCfg.titleBlockHeight ?? 18;
+    const rowGap = legendCfg.rowGap ?? 3;
+    const titleTopOffset = legendCfg.titleTopOffset ?? 8;
+    const contentTopOffset = legendCfg.contentTopOffset ?? 8;
+    const titleFontSize = legendCfg.titleFontSize ?? 12;
+    const rowFontSize = legendCfg.rowFontSize ?? 12;
+    const rowLineSpacing = legendCfg.rowLineSpacing ?? 1;
+    const rowMinHeight = legendCfg.rowMinHeight ?? 15;
+    const rowHeightExtra = legendCfg.rowHeightExtra ?? 2;
+    const panelW = legendCfg.width || 252;
     const textMaxW = panelW - innerPad * 2 - iconW - 8;
     const depth = 2000;
 
     const measureStyle = {
-      fontSize: scaleFontSize(this, 15),
+      fontSize: scaleFontSize(this, rowFontSize),
       wordWrap: { width: textMaxW },
     };
     const rowHeights = items.map((item) => {
       const probe = this.add.text(0, -9999, `${item.slot} — ${item.desc}`, measureStyle);
-      const h = Math.max(15, Math.ceil(probe.height) + 2);
+      const h = Math.max(rowMinHeight, Math.ceil(probe.height) + rowHeightExtra);
       probe.destroy();
       return h;
     });
     const rowsH = rowHeights.reduce((sum, h) => sum + h, 0) + rowGap * Math.max(0, items.length - 1);
-    const panelH = titleH + 10 + rowsH + 8;
+    const panelH = Math.max(legendCfg.minHeight || 0, titleH + 10 + rowsH + 8);
     const margins = this.boardMargins || getBoardLayoutMargins(width, height);
     const infoSize = margins.legendInfoSize || GameConfig.ui.legendInfoButtonSize || 44;
     const statsPanelH = margins.statsPanelH
@@ -779,8 +841,8 @@ class BoardScene extends Phaser.Scene {
     );
 
     this.legendPanelContainer.add(
-      this.add.text(panelLeft + innerPad, panelTop + 8, GameConfig.text.board.legendTitle, {
-        fontSize: scaleFontSize(this, 12),
+      this.add.text(panelLeft + innerPad, panelTop + titleTopOffset, GameConfig.text.board.legendTitle, {
+        fontSize: scaleFontSize(this, titleFontSize),
         color: '#8b9cb3',
         fontStyle: 'bold',
       }).setOrigin(0, 0),
@@ -788,7 +850,7 @@ class BoardScene extends Phaser.Scene {
 
     const iconX = panelLeft + innerPad + iconW / 2;
     const textX = panelLeft + innerPad + iconW + 8;
-    let rowY = panelTop + titleH + 8;
+    let rowY = panelTop + titleH + contentTopOffset;
 
     items.forEach((item, i) => {
       const rowH = rowHeights[i];
@@ -804,10 +866,10 @@ class BoardScene extends Phaser.Scene {
 
       this.legendPanelContainer.add(
         this.add.text(textX, rowY, `${item.slot} — ${item.desc}`, {
-          fontSize: scaleFontSize(this, 12),
+          fontSize: scaleFontSize(this, rowFontSize),
           color: '#d5dbdb',
           wordWrap: { width: textMaxW },
-          lineSpacing: 1,
+          lineSpacing: rowLineSpacing,
         }).setOrigin(0, 0),
       );
 
@@ -961,6 +1023,29 @@ class BoardScene extends Phaser.Scene {
 
     this.diceCenterX = width - pad - diceH / 2;
     this.diceCenterY = height - pad - diceH / 2;
+
+    const rollInfoCfg = GameConfig.ui.rollEnergyInfo || {};
+    const rollInfoW = rollInfoCfg.width ?? 230;
+    const rollInfoH = rollInfoCfg.height ?? 44;
+    const rollInfoGap = rollInfoCfg.gapFromDice ?? 10;
+    const rollInfoFont = rollInfoCfg.fontSize ?? 14;
+    const rollCost = GameState.getEnergyConfig().rollCost ?? 1;
+    const rollInfoText = GameConfig.format(
+      GameConfig.text.board.rollEnergyInfo || '1 ролл = {cost}⚡',
+      { cost: rollCost },
+    );
+    const rollInfoX = this.diceCenterX;
+    const rollInfoY = this.diceCenterY - diceH / 2 - rollInfoGap - rollInfoH / 2;
+
+    this.rollEnergyInfoBg = this.add.rectangle(rollInfoX, rollInfoY, rollInfoW, rollInfoH, 0x243447, 0.92)
+      .setStrokeStyle(2, 0x3d566e)
+      .setDepth(2001);
+    this.rollEnergyInfoText = this.add.text(rollInfoX, rollInfoY, rollInfoText, {
+      fontSize: scaleFontSize(this, rollInfoFont),
+      color: '#2ecc71',
+      fontStyle: 'bold',
+      align: 'center',
+    }).setOrigin(0.5).setDepth(2002);
   }
 
   calcIsoBoardOffsets() {
@@ -1059,7 +1144,7 @@ class BoardScene extends Phaser.Scene {
     const middleCount = Math.max(0, routeLen - 2);
     const middle = [];
     for (let i = 0; i < middleCount; i += 1) {
-      const picked = GameConfig.pickBoardTileFromPool(pool);
+      const picked = GameConfig.pickBoardTileFromPool(pool, middle);
       if (picked) middle.push({ ...picked });
     }
     return [start, ...middle, finish];
@@ -2089,7 +2174,8 @@ class BoardScene extends Phaser.Scene {
       const row = this.statRows[stat.key];
       if (row) row.valueText.setText(row.format(s));
     });
-    GameState.refreshEnergyRegenTimer(this.statRows.energy);
+    if (this.energyValueText) this.energyValueText.setText(GameState.formatEnergyStat());
+    this.updateEnergyPanel();
     if (!this.isRolling && !this.isMoving && !this.isInCombat && !this.isTeleporting) {
       this.refreshDiceState();
     }

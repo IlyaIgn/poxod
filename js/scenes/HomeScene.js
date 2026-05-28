@@ -13,7 +13,7 @@ const HOME_STAT_FORMATS = {
 const HOME_STATS = GameConfig.ui.homeStats.map((row) => ({
   ...row,
   format: HOME_STAT_FORMATS[row.key],
-}));
+})).filter((row) => row.key !== 'energy');
 
 const BATTLE_BUTTON = GameConfig.ui.battleButton;
 
@@ -48,6 +48,7 @@ class HomeScene extends Phaser.Scene {
     const knightX = landscape ? width * 0.4 : width / 2;
 
     this.createStatsPanel(width, y('stats'));
+    this.createEnergyPanel();
     this.createChroniclesButton();
     this.createShopButton();
 
@@ -329,7 +330,9 @@ class HomeScene extends Phaser.Scene {
   createStatsPanel(width, panelCenterY) {
     const padX = width - 24;
     const panelW = 200;
-    const panelH = 224;
+    const rowH = 28;
+    const headerH = 36;
+    const panelH = headerH + HOME_STATS.length * rowH + 8;
     const padY = panelCenterY - panelH / 2;
 
     this.statsPanelBg = this.add.rectangle(padX - panelW / 2, panelCenterY, panelW, panelH, 0x243447, 0.92)
@@ -342,8 +345,7 @@ class HomeScene extends Phaser.Scene {
     });
 
     this.statRows = {};
-    const rowH = 28;
-    const startY = padY + 36;
+    const startY = padY + headerH;
 
     HOME_STATS.forEach((stat, i) => {
       const rowY = startY + i * rowH;
@@ -399,6 +401,58 @@ class HomeScene extends Phaser.Scene {
         GameState.bindEnergyStatRowToggle(this, this.statRows.energy, hitX, rowY, hitW, rowH);
       }
     });
+  }
+
+  createEnergyPanel() {
+    const panel = this.statsPanelBg;
+    if (!panel) return;
+
+    const panelW = panel.displayWidth;
+    const compactH = 56;
+    const x = panel.x;
+    const y = panel.y + panel.displayHeight / 2 + 12 + compactH / 2;
+
+    this.energyPanelCompactH = compactH;
+    this.energyPanelExpandedH = 82;
+    this.energyPanelCenterY = y;
+
+    this.energyPanelBg = this.add.rectangle(x, y, panelW, compactH, 0x243447, 0.92)
+      .setStrokeStyle(2, 0x3d566e)
+      .setDepth(5);
+
+    this.energyLabelText = this.add.text(x - panelW / 2 + 14, y - 11, '⚡ Энергия', {
+      fontSize: scaleFontSize(this, 14),
+      color: '#95a5a6',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5).setDepth(6).setVisible(false);
+
+    this.energyValueText = this.add.text(x + panelW / 2 - 14, y - 11, '', {
+      fontSize: scaleFontSize(this, 15),
+      color: '#2ecc71',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0.5).setDepth(6).setVisible(false);
+
+    this.energyTimerText = this.add.text(x, y + 14, '', {
+      fontSize: scaleFontSize(this, 12),
+      color: '#7bed9f',
+      fontStyle: 'bold',
+      align: 'center',
+    }).setOrigin(0.5).setDepth(6).setVisible(false);
+
+    this.updateEnergyPanel();
+  }
+
+  updateEnergyPanel() {
+    if (!this.energyPanelBg || !this.energyValueText) return;
+    const timerLabel = GameState.getRegenTimerLabel();
+    const showTimer = !!timerLabel;
+    const h = showTimer ? this.energyPanelExpandedH : this.energyPanelCompactH;
+    const y = this.energyPanelCenterY;
+    const topY = showTimer ? y - 11 : y;
+    this.energyPanelBg.setSize(this.energyPanelBg.width, h);
+    this.energyLabelText.setPosition(this.energyLabelText.x, topY).setVisible(true);
+    this.energyValueText.setPosition(this.energyValueText.x, topY).setVisible(true);
+    this.energyTimerText.setText(timerLabel).setVisible(showTimer);
   }
 
   createUpgradeCards(width, cardsCenterY) {
@@ -493,6 +547,22 @@ class HomeScene extends Phaser.Scene {
   }
 
   goToBoard() {
+    if (!GameState.canSpendEnergyForBattle()) {
+      const cfg = GameState.getEnergyConfig();
+      this.showCenterAlert(
+        GameConfig.format(GameConfig.text.home.notEnoughEnergyBattle, {
+          cost: cfg.battleCost ?? 0,
+          seconds: GameState.secondsUntilEnergyForBattle(),
+        }),
+      );
+      this._battleNavigating = false;
+      return;
+    }
+    if (!GameState.spendEnergyForBattle()) {
+      this._battleNavigating = false;
+      return;
+    }
+
     TutorialManager.notifyAction('battle');
     this.tutorialOverlay?.destroy();
     this.tutorialOverlay = null;
@@ -525,10 +595,13 @@ class HomeScene extends Phaser.Scene {
 
     const accent = this.add.rectangle(cx, cy - h / 2 + 3, w, 6, def.color, 1).setDepth(depth);
 
-    this.add.text(cx, cy, GameConfig.text.home.battleButton, {
+    const battleCost = GameState.getEnergyConfig().battleCost ?? 0;
+    const battleLabelTpl = GameConfig.text.home.battleButtonWithEnergy || GameConfig.text.home.battleButton;
+    this.add.text(cx, cy, GameConfig.format(battleLabelTpl, { cost: battleCost }), {
       fontSize: scaleFontSize(this, 20),
       color: '#f0e6d3',
       fontStyle: 'bold',
+      align: 'center',
     }).setOrigin(0.5).setDepth(depth);
 
     const onBattle = () => {
@@ -573,7 +646,8 @@ class HomeScene extends Phaser.Scene {
       const row = this.statRows[stat.key];
       if (row) row.valueText.setText(row.format(s));
     });
-    GameState.refreshEnergyRegenTimer(this.statRows.energy);
+    if (this.energyValueText) this.energyValueText.setText(GameState.formatEnergyStat());
+    this.updateEnergyPanel();
 
     this.upgradeCards.forEach((card) => {
       const cost = GameState.upgradeCosts[card.key];
